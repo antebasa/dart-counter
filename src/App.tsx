@@ -56,7 +56,7 @@ function LoginScreen({ onLogin, isGameFull }: { onLogin: (name: string) => void;
 }
 
 // Game component
-function Game() {
+function Game({ playerName }: { playerName: string }) {
   const INITIAL_SCORE = 501;
   const [playerScore, setPlayerScore] = useState<number>(INITIAL_SCORE);
   const [opponentScore, setOpponentScore] = useState<number>(INITIAL_SCORE);
@@ -69,19 +69,53 @@ function Game() {
   
   // PubNub hook for realtime functionality
   const pubnub = usePubNub();
-  const [playerName, setPlayerName] = useState('');
   const [opponentName, setOpponentName] = useState('');
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [playerId, setPlayerId] = useState('');
   const [players, setPlayers] = useState<Player[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
 
-  // Subscribe to PubNub channel and listen for messages
+  // Initialize player and PubNub
   useEffect(() => {
-    pubnub.subscribe({
-      channels: [GAME_CHANNEL],
-      withPresence: true
-    });
+    console.log("Initializing player with name:", playerName);
+    if (playerName) {
+      // Generate a unique ID for this player
+      const id = `player-${Date.now()}`;
+      setPlayerId(id);
+      console.log("Generated player ID:", id);
 
+      // First subscribe to the channel
+      pubnub.subscribe({
+        channels: [GAME_CHANNEL],
+        withPresence: true
+      });
+      
+      // Wait a bit for subscription to complete
+      setTimeout(() => {
+        // Publish that this player has joined
+        pubnub.publish({
+          channel: GAME_CHANNEL,
+          message: {
+            type: 'PLAYER_JOINED',
+            playerId: id,
+            playerName: playerName
+          }
+        }).then(() => {
+          console.log("Published PLAYER_JOINED message");
+          setIsConnected(true);
+        }).catch(err => {
+          console.error("Failed to publish join message:", err);
+        });
+      }, 1000);
+    }
+  }, [playerName, pubnub]);
+
+  // Listen for messages and presence events
+  useEffect(() => {
+    if (!isConnected) return;
+
+    console.log("Setting up message listeners");
+    
     // Get current players in the game
     pubnub.hereNow({
       channels: [GAME_CHANNEL],
@@ -89,16 +123,20 @@ function Game() {
       includeState: true
     }).then((response) => {
       const currentOccupancy = response.totalOccupancy;
-      console.log('Current occupancy:', currentOccupancy);
+      console.log('Current occupancy:', currentOccupancy, response);
+    }).catch(err => {
+      console.error("hereNow error:", err);
     });
 
     // Listen for messages
     const handleMessage = (event: { message: any }) => {
       const message = event.message;
+      console.log("Received message:", message);
       
       if (message.type === 'GAME_STATE_UPDATE') {
         // Update game state from other player
         if (message.playerId !== playerId) {
+          console.log("Updating game state from opponent");
           setPlayerScore(message.opponentScore);
           setOpponentScore(message.playerScore);
           setPlayerLegs(message.opponentLegs);
@@ -107,24 +145,81 @@ function Game() {
           setIsMyTurn(message.currentPlayer !== 'player');
         }
       } else if (message.type === 'PLAYER_JOINED') {
+        console.log("Player joined:", message.playerName, "My ID:", playerId, "Their ID:", message.playerId);
         if (message.playerId !== playerId) {
+          console.log("Setting opponent name:", message.playerName);
           setOpponentName(message.playerName);
+          
+          // Determine turn order - whoever joined first gets the first turn
+          if (!opponentName) {
+            // If we haven't set an opponent name yet, this is the first time we're seeing this opponent
+            const amIFirstPlayer = Date.now() - parseInt(playerId.split('-')[1]) < 
+                                  Date.now() - parseInt(message.playerId.split('-')[1]);
+            console.log("Am I first player?", amIFirstPlayer);
+            setIsMyTurn(amIFirstPlayer);
+            
+            // Welcome the new player by sending our details
+            pubnub.publish({
+              channel: GAME_CHANNEL,
+              message: {
+                type: 'PLAYER_JOINED',
+                playerId: playerId,
+                playerName: playerName
+              }
+            });
+          }
+          
           // Update players list
-          setPlayers(prevPlayers => [...prevPlayers, { id: message.playerId, name: message.playerName }]);
+          setPlayers(prevPlayers => {
+            // Check if player already exists
+            if (!prevPlayers.some(p => p.id === message.playerId)) {
+              return [...prevPlayers, { id: message.playerId, name: message.playerName }];
+            }
+            return prevPlayers;
+          });
         }
       }
     };
 
-    pubnub.addListener({ message: handleMessage });
+    // Listen for presence events
+    const handlePresence = (event: any) => {
+      console.log("Presence event:", event);
+      
+      // If a player left, check if it was the opponent
+      if (event.action === 'leave' || event.action === 'timeout') {
+        // Get the current players in the channel
+        pubnub.hereNow({
+          channels: [GAME_CHANNEL],
+          includeUUIDs: true
+        }).then((response) => {
+          console.log("hereNow after leave:", response);
+          // If only one person is left (just us), reset opponent
+          if (response.totalOccupancy <= 1) {
+            setOpponentName('');
+            setPlayers(prevPlayers => prevPlayers.filter(p => p.id === playerId));
+          }
+        });
+      }
+    };
+
+    pubnub.addListener({ 
+      message: handleMessage,
+      presence: handlePresence
+    });
 
     // Cleanup subscription on unmount
     return () => {
+      pubnub.removeListener({ 
+        message: handleMessage,
+        presence: handlePresence
+      });
+      
+      // Unsubscribe from the channel
       pubnub.unsubscribe({
         channels: [GAME_CHANNEL]
       });
-      pubnub.removeListener({ message: handleMessage });
     };
-  }, [pubnub, playerId]);
+  }, [isConnected, playerId, playerName, pubnub, opponentName]);
 
   // Publish game state to PubNub after each turn
   const publishGameState = () => {
@@ -143,30 +238,6 @@ function Game() {
     });
   };
 
-  // Initialize player
-  useEffect(() => {
-    if (playerName) {
-      // Generate a unique ID for this player
-      const id = `player-${Date.now()}`;
-      setPlayerId(id);
-
-      // Publish that this player has joined
-      pubnub.publish({
-        channel: GAME_CHANNEL,
-        message: {
-          type: 'PLAYER_JOINED',
-          playerId: id,
-          playerName: playerName
-        }
-      });
-
-      // First player to join gets the first turn
-      if (players.length === 0) {
-        setIsMyTurn(true);
-      }
-    }
-  }, [playerName, pubnub, players.length]);
-  
   // Handle mode selection
   const handleModeSelect = (mode: 'single' | 'double' | 'triple') => {
     setSelectedMode(mode);
@@ -517,7 +588,7 @@ function App() {
       {!isLoggedIn ? (
         <LoginScreen onLogin={handleLogin} isGameFull={isGameFull} />
       ) : (
-        <Game />
+        <Game playerName={playerName} />
       )}
     </div>
   );
