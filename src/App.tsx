@@ -136,13 +136,31 @@ function Game({ playerName }: { playerName: string }) {
       if (message.type === 'GAME_STATE_UPDATE') {
         // Update game state from other player
         if (message.playerId !== playerId) {
-          console.log("Updating game state from opponent");
+          console.log("Updating game state from opponent:", message);
+          
+          // Handle score updates - reverse the scores as they come from the opponent's perspective
           setPlayerScore(message.opponentScore);
           setOpponentScore(message.playerScore);
+          
+          // Handle leg updates
           setPlayerLegs(message.opponentLegs);
           setOpponentLegs(message.playerLegs);
-          setCurrentPlayer(message.currentPlayer === 'player' ? 'opponent' : 'player');
-          setIsMyTurn(message.currentPlayer !== 'player');
+          
+          // Handle turn updates
+          const newCurrentPlayer = message.currentPlayer === 'player' ? 'opponent' : 'player';
+          setCurrentPlayer(newCurrentPlayer);
+          
+          // Update turn status
+          const newIsMyTurn = newCurrentPlayer === 'player';
+          setIsMyTurn(newIsMyTurn);
+          
+          console.log("Updated state:", {
+            playerScore: message.opponentScore,
+            opponentScore: message.playerScore,
+            playerLegs: message.opponentLegs,
+            opponentLegs: message.playerLegs,
+            isMyTurn: newIsMyTurn
+          });
         }
       } else if (message.type === 'PLAYER_JOINED') {
         console.log("Player joined:", message.playerName, "My ID:", playerId, "Their ID:", message.playerId);
@@ -153,12 +171,20 @@ function Game({ playerName }: { playerName: string }) {
           // Determine turn order - whoever joined first gets the first turn
           if (!opponentName) {
             // If we haven't set an opponent name yet, this is the first time we're seeing this opponent
-            const amIFirstPlayer = Date.now() - parseInt(playerId.split('-')[1]) < 
-                                  Date.now() - parseInt(message.playerId.split('-')[1]);
-            console.log("Am I first player?", amIFirstPlayer);
-            setIsMyTurn(amIFirstPlayer);
+            const myTimestamp = parseInt(playerId.split('-')[1]);
+            const theirTimestamp = parseInt(message.playerId.split('-')[1]);
+            const amIFirstPlayer = myTimestamp < theirTimestamp;
             
-            // Welcome the new player by sending our details
+            console.log("Turn order determination:", {
+              myTimestamp,
+              theirTimestamp,
+              amIFirstPlayer
+            });
+            
+            setIsMyTurn(amIFirstPlayer);
+            setCurrentPlayer(amIFirstPlayer ? 'player' : 'opponent');
+            
+            // Welcome the new player by sending our details and current game state
             pubnub.publish({
               channel: GAME_CHANNEL,
               message: {
@@ -166,6 +192,9 @@ function Game({ playerName }: { playerName: string }) {
                 playerId: playerId,
                 playerName: playerName
               }
+            }).then(() => {
+              // Also send the current game state
+              publishGameState();
             });
           }
           
@@ -223,6 +252,15 @@ function Game({ playerName }: { playerName: string }) {
 
   // Publish game state to PubNub after each turn
   const publishGameState = () => {
+    console.log("Publishing game state:", {
+      playerId,
+      playerScore,
+      opponentScore,
+      playerLegs,
+      opponentLegs,
+      currentPlayer
+    });
+    
     pubnub.publish({
       channel: GAME_CHANNEL,
       message: {
@@ -233,8 +271,13 @@ function Game({ playerName }: { playerName: string }) {
         playerLegs: playerLegs,
         opponentLegs: opponentLegs,
         currentPlayer: currentPlayer,
-        playerName: playerName
+        playerName: playerName,
+        timestamp: Date.now() // Add timestamp to ensure ordered updates
       }
+    }).then(() => {
+      console.log("Game state published successfully");
+    }).catch(error => {
+      console.error("Error publishing game state:", error);
     });
   };
 
@@ -284,10 +327,15 @@ function Game({ playerName }: { playerName: string }) {
         
         if (newScore === 0 && isValidCheckout(String(formattedValue))) {
           // Player won with this dart
-          setPlayerLegs(playerLegs + 1);
+          setPlayerLegs(prevLegs => {
+            const newLegs = prevLegs + 1;
+            // Use callback to ensure we have the latest value
+            setTimeout(() => {
+              publishGameState();
+            }, 100);
+            return newLegs;
+          });
           resetScores();
-          // Publish updated game state
-          setTimeout(publishGameState, 100);
           return; // Exit early, don't increment currentInputIndex
         } else if (newScore < 0 || newScore === 1 || (newScore === 0 && !isValidCheckout(String(formattedValue)))) {
           // Bust - reset inputs and keep current score
@@ -295,18 +343,29 @@ function Game({ playerName }: { playerName: string }) {
           setCurrentPlayer('opponent');
           setIsMyTurn(false);
           // Publish updated game state
-          setTimeout(publishGameState, 100);
+          publishGameState();
           return; // Exit early, don't increment currentInputIndex
         }
+        
+        // Update score after each dart
+        setPlayerScore(newScore);
+        // Publish interim score update
+        setTimeout(() => {
+          publishGameState();
+        }, 100);
       } else {
         const newScore = opponentScore - currentThrowTotal;
         
         if (newScore === 0 && isValidCheckout(String(formattedValue))) {
           // Opponent won with this dart
-          setOpponentLegs(opponentLegs + 1);
+          setOpponentLegs(prevLegs => {
+            const newLegs = prevLegs + 1;
+            setTimeout(() => {
+              publishGameState();
+            }, 100);
+            return newLegs;
+          });
           resetScores();
-          // Publish updated game state
-          setTimeout(publishGameState, 100);
           return; // Exit early, don't increment currentInputIndex
         } else if (newScore < 0 || newScore === 1 || (newScore === 0 && !isValidCheckout(String(formattedValue)))) {
           // Bust - reset inputs and keep current score
@@ -314,9 +373,16 @@ function Game({ playerName }: { playerName: string }) {
           setCurrentPlayer('player');
           setIsMyTurn(true);
           // Publish updated game state
-          setTimeout(publishGameState, 100);
+          publishGameState();
           return; // Exit early, don't increment currentInputIndex
         }
+        
+        // Update score after each dart
+        setOpponentScore(newScore);
+        // Publish interim score update
+        setTimeout(() => {
+          publishGameState();
+        }, 100);
       }
       
       // Move to next input if no bust or win
@@ -349,7 +415,8 @@ function Game({ playerName }: { playerName: string }) {
     setInputs(['', '', '']);
     setCurrentInputIndex(0);
     
-    // Publish updated game state
+    // Publish updated game state immediately after state updates
+    // Use setTimeout to ensure state has been updated
     setTimeout(publishGameState, 100);
   };
 
@@ -398,6 +465,7 @@ function Game({ playerName }: { playerName: string }) {
   
   // Reset scores to 501
   const resetScores = () => {
+    console.log("Resetting scores");
     setPlayerScore(INITIAL_SCORE);
     setOpponentScore(INITIAL_SCORE);
     setCurrentPlayer('player');
@@ -405,6 +473,41 @@ function Game({ playerName }: { playerName: string }) {
     setInputs(['', '', '']);
     setCurrentInputIndex(0);
   };
+
+  // Watch for players array changes to detect when both players are ready
+  useEffect(() => {
+    // When we have two players, ensure the game is properly initialized
+    if (players.length === 2 && opponentName) {
+      console.log("Both players joined, initializing game");
+      // The first player to join (with earlier timestamp) goes first
+      const playerIds = players.map(p => p.id);
+      playerIds.sort((a, b) => {
+        const aTime = parseInt(a.split('-')[1]);
+        const bTime = parseInt(b.split('-')[1]);
+        return aTime - bTime;
+      });
+      
+      const amIFirstPlayer = playerIds[0] === playerId;
+      console.log("First player determination:", {
+        playerIds,
+        myId: playerId,
+        amIFirstPlayer
+      });
+      
+      // Reset to initial score
+      setPlayerScore(INITIAL_SCORE);
+      setOpponentScore(INITIAL_SCORE);
+      
+      // Set turn based on join order
+      setCurrentPlayer(amIFirstPlayer ? 'player' : 'opponent');
+      setIsMyTurn(amIFirstPlayer);
+      
+      // If I'm the first player, publish initial game state
+      if (amIFirstPlayer) {
+        setTimeout(publishGameState, 300);
+      }
+    }
+  }, [players.length, opponentName, playerId]);
 
   // Generate number buttons (1-20)
   const renderNumberButtons = () => {
