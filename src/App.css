@@ -254,3 +254,134 @@ body, html {
   height: 60px;
   font-size: 1.4rem;
 }
+
+/* Login Screen */
+.login-screen {
+  max-width: 450px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  background-color: #292a2d;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 20px;
+}
+
+.login-screen h1 {
+  font-size: 2.5rem;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.login-screen form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.login-screen input {
+  padding: 15px;
+  font-size: 1.2rem;
+  border-radius: 8px;
+  border: none;
+  background-color: #3a3a3a;
+  color: white;
+}
+
+.login-screen button {
+  padding: 15px;
+  font-size: 1.2rem;
+  border-radius: 8px;
+  border: none;
+  background-color: #4a4a4a;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.login-screen button:hover {
+  background-color: #555;
+}
+
+.game-full-message {
+  color: #ff6b6b;
+  font-size: 1.2rem;
+  padding: 20px;
+  background-color: rgba(255, 100, 100, 0.1);
+  border-radius: 8px;
+}
+
+/* Game Header and Status */
+.game-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.player-names {
+  font-size: 1.2rem;
+  color: #ddd;
+  margin-top: 5px;
+}
+
+.player-name {
+  font-weight: bold;
+  color: white;
+}
+
+.game-status {
+  text-align: center;
+  margin: 10px 0;
+  min-height: 30px;
+}
+
+.waiting-message {
+  padding: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 1rem;
+  color: #ddd;
+}
+
+.turn-indicator {
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  background-color: #333;
+  color: #ddd;
+  transition: all 0.3s ease;
+}
+
+.turn-indicator.my-turn {
+  background-color: #2d6a4f;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(45, 106, 79, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(45, 106, 79, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(45, 106, 79, 0);
+  }
+}
+
+/* Disabled Button State */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  background-color: inherit;
+}
