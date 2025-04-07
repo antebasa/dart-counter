@@ -148,16 +148,21 @@ function Game({ playerName }: GameProps) {
     return () => {
       pubnub.removeListener({ message: handleMessage });
     };
-    // Include all dependencies that might affect message handling logic
   }, [isConnected, playerId, pubnub, gameRole, playerScore, opponentScore, playerLegs, opponentLegs, currentPlayer, debugMsgCount]);
 
   // Specific message handlers
   const handleHelloMessage = (message: HelloMessage) => {
-    console.log(`Player joined: ${message.playerName}`);
+    if (message.playerId === playerId) {
+        console.log("[handleHelloMessage] Ignoring HELLO message from self.");
+        return; 
+    }
+    
+    console.log(`[handleHelloMessage] Received HELLO from ${message.playerName} (${message.playerId}). My role: ${gameRole}. Setting opponent name.`);
+
     setOpponentName(message.playerName);
     
     if (gameRole === 'player1') {
-      console.log("I'm player1, sending WELCOME and game state to new player2");
+      console.log("[handleHelloMessage] As player1, sending WELCOME back.");
       
       const welcomeMessage: WelcomeMessage = {
         type: 'WELCOME',
@@ -171,6 +176,8 @@ function Game({ playerName }: GameProps) {
           // Send initial game state immediately after welcome
           publishGameState(); 
         });
+    } else {
+       console.log(`[handleHelloMessage] My role is ${gameRole || 'not set yet'}, not sending WELCOME.`);
     }
   };
 
@@ -359,6 +366,9 @@ function Game({ playerName }: GameProps) {
   if (connectionError) {
     return <div className="error-message">{connectionError}</div>;
   }
+
+  // Log state right before rendering
+  console.log(`[Render] Player: ${playerName}, Opponent: ${opponentName}, Role: ${gameRole}, Started: ${gameStarted}`);
 
   return (
     <div className="darts-counter">

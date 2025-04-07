@@ -5,6 +5,7 @@ import { PubNubProvider, usePubNub } from 'pubnub-react';
 import { GAME_CHANNEL } from './types'; // Import shared constant
 import LoginScreen from './components/LoginScreen';
 import Game from './components/Game';
+import { Test } from './components/Test';
 
 // PubNub configuration
 const pubnubConfig = {
@@ -20,65 +21,14 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [isGameFull, setIsGameFull] = useState(false);
-  const pubnubInstance = usePubNub(); // Get instance from context
-
-  // Check if game is full when app loads and listen for presence changes
-  useEffect(() => {
-    const checkOccupancy = () => {
-      pubnubInstance.hereNow({
-        channels: [GAME_CHANNEL],
-        includeUUIDs: true
-      }).then((response) => {
-        const occupancy = response.totalOccupancy;
-        console.log("Current occupancy:", occupancy);
-        setIsGameFull(occupancy >= 2);
-      }).catch(error => {
-        console.error("Error fetching Here Now:", error);
-      });
-    };
-
-    // Initial check
-    checkOccupancy();
-
-    // Listener for presence events
-    const handlePresence = (event: any) => {
-      console.log("Presence event:", event);
-      // Re-check occupancy on join/leave/timeout
-      if (['join', 'leave', 'timeout'].includes(event.action)) {
-        checkOccupancy();
-      }
-    };
-
-    pubnubInstance.addListener({ presence: handlePresence });
-
-    // Cleanup listener
-    return () => {
-      pubnubInstance.removeListener({ presence: handlePresence });
-    };
-  }, [pubnubInstance]);
-
   // Handle login action
-  const handleLogin = (name: string) => {
-    if (isGameFull) {
-      console.warn("Attempted to log in, but game is full.");
-      // Optionally show a message to the user
-      return;
-    }
-    setPlayerName(name);
-    setIsLoggedIn(true);
-    
-    // Set PubNub state for the user (optional, good for presence details)
-    pubnubInstance.setState({
-      state: { name: name },
-      channels: [GAME_CHANNEL]
-    });
-    console.log(`Player ${name} logged in.`);
-  };
 
   return (
     <div className="app">
       {!isLoggedIn ? (
-        <LoginScreen onLogin={handleLogin} isGameFull={isGameFull} />
+        <LoginScreen onLogin={() => {
+          console.log("logged in")
+        }} isGameFull={isGameFull} />
       ) : (
         <Game playerName={playerName} />
       )}
@@ -90,7 +40,8 @@ function App() {
 function AppWrapper() {
   return (
     <PubNubProvider client={pubnub}>
-      <App />
+      {/*<App />*/}
+      <Test></Test>
     </PubNubProvider>
   );
 }
