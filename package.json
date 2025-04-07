@@ -40,5 +40,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "packageManager": "yarn@4.8.1",
+  "devDependencies": {
+    "eslint-config-react-app": "^7.0.1"
   }
 }

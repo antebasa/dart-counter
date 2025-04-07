@@ -1,38 +1,256 @@
-.App {
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body, html {
+  height: 100%;
+  background-color: #292a2d;
+  color: white;
+  font-family: sans-serif;
+}
+
+.darts-counter {
+  max-width: 450px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #292a2d;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.legs-display {
   text-align: center;
+  margin-bottom: 10px;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.legs-text {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #ddd;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.score-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  padding: 10px 0;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.divider {
+  position: absolute;
+  left: 50%;
+  height: 80%;
+  width: 1px;
+  background-color: #555;
+}
+
+.score-section {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  transition: background-color 0.3s ease;
+}
+
+.active-player {
+  background-color: #3a3a3a;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.score {
+  font-size: 4rem;
+  font-weight: bold;
+}
+
+.player {
+  font-size: 1.5rem;
+  color: #ddd;
+}
+
+.input-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.input-display {
+  flex: 1;
+  height: 80px;
+  border-radius: 10px;
+  background-color: #333;
+  border: 1px solid #444;
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+}
+
+.input-fields {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+}
+
+.input-field {
+  flex: 1;
+  height: 50px;
+  border-radius: 6px;
+  background-color: #444;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  font-size: 1.8rem;
+  font-weight: bold;
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.input-field.active {
+  border: 2px solid #666;
+  background-color: #555;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.backspace-button {
+  height: 60px;
+  width: 60px;
+  background-color: #555;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 1.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.backspace-button:hover {
+  background-color: #666;
+}
+
+.backspace-button:active {
+  background-color: #777;
+}
+
+.mode-selector {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+.mode-button {
+  flex: 1;
+  padding: 12px;
+  font-size: 1.2rem;
+  background-color: #3a3a3a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.mode-button:hover {
+  background-color: #4a4a4a;
+}
+
+.mode-active {
+  background-color: #555;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.buttons-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.button-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 1.2rem;
+  color: #999;
+  margin-bottom: 5px;
+}
+
+.buttons-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score-button {
+  flex: 1;
+  height: 50px;
+  background-color: #3a3a3a;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-button:hover:not(:disabled) {
+  background-color: #4a4a4a;
+}
+
+.score-button:active:not(:disabled) {
+  background-color: #555;
+}
+
+.score-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.score-button.empty {
+  background-color: transparent;
+  cursor: default;
+}
+
+.wider-button {
+  flex: 1;
+  width: 100%;
+  height: 60px;
+  font-size: 1.4rem;
+}
+
+/* Special buttons styling */
+.button-section:last-child .buttons-row {
+  justify-content: space-around;
+}
+
+.button-section:last-child .score-button {
+  min-width: 120px;
+  height: 60px;
+  font-size: 1.4rem;
+}
+
+.special-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.special-buttons .score-button {
+  min-width: calc(50% - 5px);
+  height: 60px;
+  font-size: 1.4rem;
 }
