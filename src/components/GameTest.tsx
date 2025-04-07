@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {usePubNub} from 'pubnub-react';
-import {CurrentPlayer, DartThrownMessage, GameRole, INITIAL_SCORE, ScoreMode, HelloMessage, WelcomeMessage} from '../types';
+import {CurrentPlayer, DartThrownMessage, GameRole, GameStateMessage, INITIAL_SCORE, ScoreMode, HelloMessage, WelcomeMessage} from '../types';
 
 import GameHeader from './GameHeader';
 import GameStatus from './GameStatus';
@@ -32,10 +32,11 @@ function Game({playerName}: GameProps) {
     const [playerId, setPlayerId] = useState<string>('');
     const [isConnected, setIsConnected] = useState<boolean>(false);
     const [connectionError, setConnectionError] = useState<string>('');
+    const [gameChannel, setGameChannel] = useState<string>('');
 
     // Game control state
     const [gameRole, setGameRole] = useState<GameRole>(''); // player1 = first player, player2 = second player
-    const [currentPlayer, setCurrentPlayer] = useState<CurrentPlayer>('player1'); // Who's currently playing
+    const [activePlayer, setActivePlayer] = useState<CurrentPlayer>('player1'); // Who's currently playing
     const [isMyTurn, setIsMyTurn] = useState<boolean>(false);
     const [gameStarted, setGameStarted] = useState<boolean>(false);
 
@@ -45,6 +46,16 @@ function Game({playerName}: GameProps) {
     // Handle mode selection
     const handleModeSelect = (mode: ScoreMode) => {
         setSelectedMode(mode);
+    };
+
+    // Update turn based on role and active player
+    const updateTurnStatus = (role: GameRole, currentActivePlayer: CurrentPlayer) => {
+        const myTurn = (role === 'player1' && currentActivePlayer === 'player1') || 
+                       (role === 'player2' && currentActivePlayer === 'player2');
+        
+        console.log(`TURN UPDATE: My role is ${role}, active player is ${currentActivePlayer}, so it's ${myTurn ? 'MY' : 'NOT MY'} turn`);
+        setIsMyTurn(myTurn);
+        return myTurn;
     };
 
     useEffect(() => {
@@ -115,10 +126,18 @@ function Game({playerName}: GameProps) {
                         const opponent = otherPlayers[0];
                         console.log("Found opponent:", opponent.uuid);
                         
+                        // I'm player1 (first to exist in the lobby)
+                        const myRole: GameRole = 'player1';
+                        setGameRole(myRole);
+                        
+                        // First player (player1) starts the game
+                        setActivePlayer('player1');
+                        updateTurnStatus(myRole, 'player1');
+                        
                         // Set opponent info
                         setOpponentName(opponent.uuid);
                         setIsConnected(true);
-                        setGameRole('player1'); // First player joined is player1
+                        setGameStarted(true);
                         
                         // Send welcome message to the other player
                         sendWelcomeMessage(opponent.uuid);
@@ -143,10 +162,18 @@ function Game({playerName}: GameProps) {
                 if (event.message.type === 'HELLO' && event.message.playerId !== playerName) {
                     console.log("Hello message from:", event.message.playerName);
                     
+                    // I'm player1 (first to receive a hello)
+                    const myRole: GameRole = 'player1';
+                    setGameRole(myRole);
+                    
+                    // Player1 starts the game
+                    setActivePlayer('player1');
+                    updateTurnStatus(myRole, 'player1');
+                    
                     // Set opponent info
                     setOpponentName(event.message.playerName);
                     setIsConnected(true);
-                    setGameRole('player1'); // I was here first, so I'm player1
+                    setGameStarted(true);
                     
                     // Send welcome message back to the player who just joined
                     sendWelcomeMessage(event.message.playerId);
@@ -159,29 +186,57 @@ function Game({playerName}: GameProps) {
                 if (event.message.type === 'WELCOME' && event.message.playerId !== playerName) {
                     console.log("Welcome message from:", event.message.playerName);
                     
+                    // I'm player2 (I received a welcome message)
+                    const myRole: GameRole = 'player2';
+                    setGameRole(myRole);
+                    
+                    // First player (player1) starts the game
+                    setActivePlayer('player1');
+                    updateTurnStatus(myRole, 'player1');
+                    
                     // Set opponent info
                     setOpponentName(event.message.playerName);
                     setIsConnected(true);
-                    setGameRole('player2'); // I received welcome, so I'm player2
-                    
-                    console.log("I am player2, opponent is player1:", event.message.playerName);
-                    
-                    // Notify the UI that the game can start
                     setGameStarted(true);
-                    setIsMyTurn(false); // Player1 goes first
+                    
+                    // Pair with opponent (if not already paired)
+                    if (!gameChannel) {
+                        pairWithOpponent(event.message.playerId);
+                    }
                 }
                 
                 // Handle game start messages
                 if (event.message.type === 'start' && event.publisher !== playerName) {
                     console.log("Game start message from:", event.publisher);
                     setGameStarted(true);
+                }
+                
+                // Handle dart thrown messages
+                if (event.message.type === 'DART_THROWN' && event.message.playerId !== playerName) {
+                    console.log("Dart thrown by opponent:", event.message.dartValue);
+                    // No need to update anything locally for individual darts
+                }
+                
+                // Handle game state update messages
+                if (event.message.type === 'GAME_STATE' && event.message.playerId !== playerName) {
+                    console.log("Game state update from opponent:", event.message);
                     
-                    // Set turns based on role
+                    // Update opponent scores based on game role
                     if (gameRole === 'player1') {
-                        setIsMyTurn(true);
+                        // I'm player1, so update player2's score
+                        setOpponentScore(event.message.player2Score);
+                        setOpponentLegs(event.message.player2Legs);
                     } else {
-                        setIsMyTurn(false);
+                        // I'm player2, so update player1's score
+                        setOpponentScore(event.message.player1Score);
+                        setOpponentLegs(event.message.player1Legs);
                     }
+                    
+                    // Update active player
+                    setActivePlayer(event.message.currentPlayer);
+                    
+                    // Update turn status based on the new active player
+                    updateTurnStatus(gameRole, event.message.currentPlayer);
                 }
             },
             presence: (event: any) => {
@@ -191,10 +246,18 @@ function Game({playerName}: GameProps) {
                 if (event.action === "join" && event.uuid !== playerName && !opponentName) {
                     console.log("New player joined:", event.uuid);
                     
+                    // I'm player1 (I was here first)
+                    const myRole: GameRole = 'player1';
+                    setGameRole(myRole);
+                    
+                    // First player (player1) starts the game
+                    setActivePlayer('player1');
+                    updateTurnStatus(myRole, 'player1');
+                    
                     // Set opponent info
                     setOpponentName(event.uuid);
                     setIsConnected(true);
-                    setGameRole('player1'); // I was here first, so I'm player1
+                    setGameStarted(true);
                     
                     // Send welcome message to the new player
                     sendWelcomeMessage(event.uuid);
@@ -238,29 +301,63 @@ function Game({playerName}: GameProps) {
     const pairWithOpponent = (opponentId: string) => {
         const channelName = generateGameChannel(playerName, opponentId);
         console.log("Pairing with opponent:", opponentId, "in channel:", channelName);
+        
+        // Store game channel
+        setGameChannel(channelName);
 
         // Subscribe to the game channel
         pubnub.subscribe({channels: [channelName]});
         
-        // Notify start
-        pubnub.publish({
-            channel: channelName, 
-            message: {
-                type: "start",
-                playerName: playerName,
-                timestamp: Date.now()
-            }
-        });
-        
-        // If I'm player1, I start
-        if (gameRole === 'player1') {
-            setIsMyTurn(true);
-            setGameStarted(true);
-        }
+        // Send initial game state with a delay to ensure state variables are set
+        setTimeout(() => {
+            // Notify start
+            pubnub.publish({
+                channel: channelName, 
+                message: {
+                    type: "start",
+                    playerName: playerName,
+                    timestamp: Date.now()
+                }
+            });
+            
+            // Send initial game state
+            sendGameState();
+        }, 500);
     };
 
     const generateGameChannel = (u1: string, u2: string) => {
         return `game-${[u1, u2].sort().join("-")}`;
+    };
+
+    // Send game state to other player
+    const sendGameState = () => {
+        if (!gameChannel) {
+            console.error("Cannot send game state: no game channel");
+            return;
+        }
+        
+        try {
+            // Determine which player score to send based on role
+            const gameStateMessage: GameStateMessage = {
+                type: 'GAME_STATE',
+                playerId: playerName,
+                player1Score: gameRole === 'player1' ? playerScore : opponentScore,
+                player2Score: gameRole === 'player2' ? playerScore : opponentScore,
+                player1Legs: gameRole === 'player1' ? playerLegs : opponentLegs,
+                player2Legs: gameRole === 'player2' ? playerLegs : opponentLegs,
+                currentPlayer: activePlayer,
+                timestamp: Date.now()
+            };
+            
+            pubnub.publish({
+                channel: gameChannel,
+                message: gameStateMessage
+            });
+            
+            console.log("Sent game state:", gameStateMessage);
+        } catch (error) {
+            console.error("Error sending game state:", error);
+        }
     };
 
     // Game logic helpers
@@ -283,8 +380,14 @@ function Game({playerName}: GameProps) {
 
     // Input handlers
     const handleButtonClick = (value: string | number) => {
-        if (!isMyTurn || !gameStarted || currentInputIndex >= 3) return;
+        // Extra validation to ensure only active player can throw
+        if (!isMyTurn || !gameStarted || currentInputIndex >= 3) {
+            console.log("Button click rejected: isMyTurn=", isMyTurn, "gameStarted=", gameStarted, "index=", currentInputIndex);
+            return;
+        }
 
+        console.log("Processing dart throw as", gameRole);
+        
         let formattedValue = String(value);
         if (typeof value === 'number') { // Number button clicked
             if (selectedMode === 'double') formattedValue = `D${value}`;
@@ -308,6 +411,13 @@ function Game({playerName}: GameProps) {
             dartValue: formattedValue,
             timestamp: Date.now()
         };
+        
+        if (gameChannel) {
+            pubnub.publish({
+                channel: gameChannel,
+                message: dartThrownMessage
+            });
+        }
 
         // Update local score immediately for responsiveness
         setPlayerScore(potentialScore);
@@ -319,6 +429,9 @@ function Game({playerName}: GameProps) {
                 console.log("Win!");
                 setPlayerLegs(prev => prev + 1);
                 resetScores();
+                
+                // Send updated game state to opponent
+                setTimeout(() => sendGameState(), 100);
             } else if (potentialScore < 0 || potentialScore === 1 || (potentialScore === 0 && !isValidCheckout(formattedValue))) {
                 // Bust - Restore score before switching turn
                 console.log("Bust!");
@@ -326,6 +439,9 @@ function Game({playerName}: GameProps) {
                 setInputs(['', '', '']);
                 setCurrentInputIndex(0);
                 switchTurn();
+                
+                // Send updated game state to opponent
+                setTimeout(() => sendGameState(), 100);
             } else {
                 // Continue turn or switch
                 const nextInputIndex = currentInputIndex + 1;
@@ -337,9 +453,12 @@ function Game({playerName}: GameProps) {
                     setInputs(['', '', '']);
                     setCurrentInputIndex(0);
                     switchTurn();
+                    
+                    // Send updated game state to opponent
+                    setTimeout(() => sendGameState(), 100);
                 }
             }
-        }, 50); // Delay ensures state updates before logic check
+        }, 100); // Delay ensures state updates before logic check
     };
 
     const handleBackspace = () => {
@@ -353,14 +472,18 @@ function Game({playerName}: GameProps) {
         setInputs(newInputs);
         setCurrentInputIndex(prev => prev - 1);
         setPlayerScore(prev => prev + scoreToRestore);
-
     };
 
     // Game flow functions
     const switchTurn = () => {
-        const nextPlayer = gameRole === 'player1' ? 'player2' : 'player1';
-        setCurrentPlayer(nextPlayer);
-        setIsMyTurn(false);
+        // Switch from player1 to player2 or vice versa
+        const newActivePlayer = activePlayer === 'player1' ? 'player2' : 'player1';
+        console.log(`Switching turn from ${activePlayer} to ${newActivePlayer}`);
+        
+        setActivePlayer(newActivePlayer);
+        
+        // Update isMyTurn based on my role and new active player
+        updateTurnStatus(gameRole, newActivePlayer);
     };
 
     const resetScores = () => {
@@ -369,8 +492,8 @@ function Game({playerName}: GameProps) {
         setOpponentScore(INITIAL_SCORE);
         setInputs(['', '', '']);
         setCurrentInputIndex(0);
-        setCurrentPlayer('player1'); // Player 1 always starts a new leg
-        setIsMyTurn(gameRole === 'player1');
+        setActivePlayer('player1'); // Player 1 always starts a new leg
+        updateTurnStatus(gameRole, 'player1');
     };
 
     // Render
@@ -378,7 +501,9 @@ function Game({playerName}: GameProps) {
         return <div className="error-message">{connectionError}</div>;
     }
 
-    // Log state right before rendering
+    // Improved debug info
+    console.log(`RENDER: I am ${gameRole}, active player is ${activePlayer}, isMyTurn=${isMyTurn}`);
+
     return (
         <div className="darts-counter">
             <GameHeader
@@ -390,7 +515,7 @@ function Game({playerName}: GameProps) {
                 debugMsgCount={debugMsgCount}
             />
             <GameStatus
-                gameStarted={gameStarted}
+                gameStarted={gameStarted && opponentName !== ''}
                 isMyTurn={isMyTurn}
                 opponentName={opponentName}
             />
@@ -426,6 +551,11 @@ function Game({playerName}: GameProps) {
                 gameStarted={gameStarted}
                 selectedMode={selectedMode}
             />
+            
+            {/* Debug display */}
+            <div style={{marginTop: '1rem', fontSize: '0.8rem', color: '#666', background: '#f5f5f5', padding: '0.5rem'}}>
+                Debug: {gameRole} | Active Player: {activePlayer} | My Turn: {isMyTurn ? 'YES' : 'NO'}
+            </div>
         </div>
     );
 }
