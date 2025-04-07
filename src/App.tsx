@@ -5,7 +5,8 @@ import { PubNubProvider, usePubNub } from 'pubnub-react';
 import { GAME_CHANNEL } from './types'; // Import shared constant
 import LoginScreen from './components/LoginScreen';
 import Game from './components/Game';
-import { Test } from './components/Test';
+import GameTest from './components/GameTest';
+// import { Test } from './components/Test';
 
 // PubNub configuration
 const pubnubConfig = {
@@ -14,7 +15,7 @@ const pubnubConfig = {
   userId: `user-${Math.floor(Math.random() * 1000000)}`
 };
 
-const pubnub = new PubNub(pubnubConfig);
+const pubnub = new PubNub(pubnubConfig)
 
 // Main App component
 function App() {
@@ -22,15 +23,17 @@ function App() {
   const [playerName, setPlayerName] = useState('');
   const [isGameFull, setIsGameFull] = useState(false);
   // Handle login action
+  const handleLogin = (name: string) => {
+    setPlayerName(name);
+    setIsLoggedIn(true);
+  };
 
   return (
     <div className="app">
       {!isLoggedIn ? (
-        <LoginScreen onLogin={() => {
-          console.log("logged in")
-        }} isGameFull={isGameFull} />
+        <LoginScreen onLogin={handleLogin} isGameFull={isGameFull} />
       ) : (
-        <Game playerName={playerName} />
+          <GameTest playerName={playerName} />
       )}
     </div>
   );
@@ -40,8 +43,7 @@ function App() {
 function AppWrapper() {
   return (
     <PubNubProvider client={pubnub}>
-      {/*<App />*/}
-      <Test></Test>
+      <App />
     </PubNubProvider>
   );
 }
