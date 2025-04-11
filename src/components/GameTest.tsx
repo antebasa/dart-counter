@@ -48,6 +48,7 @@ function Game({playerName}: GameProps) {
     const [activePlayer, setActivePlayer] = useState<CurrentPlayer>('player1'); // Who's currently playing
     const [isMyTurn, setIsMyTurn] = useState<boolean>(false);
     const [gameStarted, setGameStarted] = useState<boolean>(false);
+    const [legStartPlayer, setLegStartPlayer] = useState<CurrentPlayer>('player1'); // Track who starts the current leg
 
     // Debug counter
     const [debugMsgCount, setDebugMsgCount] = useState<number>(0);
@@ -609,9 +610,15 @@ function Game({playerName}: GameProps) {
         setOpponentScore(INITIAL_SCORE);
         setInputs(['', '', '']);
         setCurrentInputIndex(0);
-        setActivePlayer('player1'); // Player 1 always starts a new leg
-        activePlayerRef.current = 'player1';
-        updateTurnStatus(gameRoleRef.current, 'player1');
+        
+        // Alternate starting player for the new leg
+        const newStartingPlayer: CurrentPlayer = legStartPlayer === 'player1' ? 'player2' : 'player1';
+        console.log(`New leg: Changing starting player from ${legStartPlayer} to ${newStartingPlayer}`);
+        
+        setLegStartPlayer(newStartingPlayer);
+        setActivePlayer(newStartingPlayer);
+        activePlayerRef.current = newStartingPlayer;
+        updateTurnStatus(gameRoleRef.current, newStartingPlayer);
     };
 
     // Render
