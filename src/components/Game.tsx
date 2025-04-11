@@ -191,22 +191,43 @@ function Game({ playerName }: GameProps) {
   };
 
   const handleGameStateMessage = (message: GameStateMessage) => {
-    console.log("Received GAME_STATE");
+    console.log("Received GAME_STATE", message);
 
+    // Check if this is a leg reset (after someone won a leg)
+    // This is indicated by scores being reset to INITIAL_SCORE
+    const isLegReset = message.player1Score === INITIAL_SCORE && message.player2Score === INITIAL_SCORE;
+    
+    // Always update leg counts first
     if (gameRole === 'player1') {
-      setPlayerScore(message.player1Score);
-      setOpponentScore(message.player2Score);
       setPlayerLegs(message.player1Legs);
       setOpponentLegs(message.player2Legs);
     } else if (gameRole === 'player2') {
-      setPlayerScore(message.player2Score);
-      setOpponentScore(message.player1Score);
       setPlayerLegs(message.player2Legs);
       setOpponentLegs(message.player1Legs);
     }
+    
+    if (isLegReset) {
+      console.log("Detected leg reset in game state message - resetting both scores to", INITIAL_SCORE);
+      setPlayerScore(INITIAL_SCORE);
+      setOpponentScore(INITIAL_SCORE);
+      setInputs(['', '', '']);
+      setCurrentInputIndex(0);
+    } else {
+      // Normal game state update
+      if (gameRole === 'player1') {
+        setPlayerScore(message.player1Score);
+        setOpponentScore(message.player2Score);
+      } else if (gameRole === 'player2') {
+        setPlayerScore(message.player2Score);
+        setOpponentScore(message.player1Score);
+      }
+    }
 
     setCurrentPlayer(message.currentPlayer);
-    setIsMyTurn(message.currentPlayer === gameRole);
+    setIsMyTurn(
+      (gameRole === 'player1' && message.currentPlayer === 'player1') || 
+      (gameRole === 'player2' && message.currentPlayer === 'player2')
+    );
     setGameStarted(true); // Receiving game state implies the game has started
   };
 
@@ -227,15 +248,20 @@ function Game({ playerName }: GameProps) {
       return;
     }
 
-    console.log("Publishing game state");
+    const p1Score = gameRole === 'player1' ? playerScore : opponentScore;
+    const p2Score = gameRole === 'player2' ? playerScore : opponentScore;
+    const p1Legs = gameRole === 'player1' ? playerLegs : opponentLegs;
+    const p2Legs = gameRole === 'player2' ? playerLegs : opponentLegs;
+    
+    console.log(`Publishing game state: Player1 score=${p1Score}, Player2 score=${p2Score}, Legs ${p1Legs}:${p2Legs}, Current player: ${currentPlayer}`);
 
     const gameStateMessage: GameStateMessage = {
       type: 'GAME_STATE',
       playerId: playerId,
-      player1Score: gameRole === 'player1' ? playerScore : opponentScore,
-      player2Score: gameRole === 'player2' ? playerScore : opponentScore,
-      player1Legs: gameRole === 'player1' ? playerLegs : opponentLegs,
-      player2Legs: gameRole === 'player2' ? playerLegs : opponentLegs,
+      player1Score: p1Score,
+      player2Score: p2Score,
+      player1Legs: p1Legs, 
+      player2Legs: p2Legs,
       currentPlayer: currentPlayer,
       timestamp: Date.now()
     };
@@ -300,9 +326,36 @@ function Game({ playerName }: GameProps) {
         if (potentialScore === 0 && isValidCheckout(formattedValue)) {
             // Win
             console.log("Win!");
-            setPlayerLegs(prev => prev + 1);
-            resetScores();
-            publishGameState();
+            
+            // First, store current opponent legs
+            const currentOpponentLegs = opponentLegs;
+            
+            // Then update player legs and properly handle the state updates
+            setPlayerLegs(prev => {
+                const newLegs = prev + 1;
+                
+                // Use a callback to ensure we have the updated legs value
+                setTimeout(() => {
+                    resetScores();
+                    // Ensure the game state is published with the updated leg count
+                    const gameStateMessage: GameStateMessage = {
+                        type: 'GAME_STATE',
+                        playerId: playerId,
+                        player1Score: INITIAL_SCORE,
+                        player2Score: INITIAL_SCORE,
+                        player1Legs: gameRole === 'player1' ? newLegs : currentOpponentLegs,
+                        player2Legs: gameRole === 'player2' ? newLegs : currentOpponentLegs,
+                        currentPlayer: 'player1', // Player 1 always starts a new leg
+                        timestamp: Date.now()
+                    };
+                    
+                    pubnub.publish({ channel: GAME_CHANNEL, message: gameStateMessage })
+                        .then(() => console.log("Game state with updated legs published:", gameStateMessage))
+                        .catch(error => console.error("Failed to publish game state:", error));
+                }, 10);
+                
+                return newLegs;
+            });
         } else if (potentialScore < 0 || potentialScore === 1 || (potentialScore === 0 && !isValidCheckout(formattedValue))) {
             // Bust - Restore score before switching turn
             console.log("Bust!");
@@ -359,6 +412,8 @@ function Game({ playerName }: GameProps) {
     setInputs(['', '', '']);
     setCurrentInputIndex(0);
     setCurrentPlayer('player1'); // Player 1 always starts a new leg
+    
+    // Player1 always starts a new leg
     setIsMyTurn(gameRole === 'player1');
   };
 
