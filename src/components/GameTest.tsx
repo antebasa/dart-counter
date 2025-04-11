@@ -258,49 +258,59 @@ function Game({playerName}: GameProps) {
                     const currentRole = gameRoleRef.current;
                     console.log(`Game state update from opponent. I am ${currentRole}. Message:`, event.message);
 
-                    // Update scores and legs based on game role
+                    // Check for leg changes before updating scores
+                    let legChanged = false;
+                    
                     if (currentRole === 'player1') {
-                        // I'm player1, so update player2's score and my score
-                        console.log(`Updating scores: my score=${event.message.player1Score}, opponent score=${event.message.player2Score} (I'm player1)`);
-                        setPlayerScore(event.message.player1Score);
-                        playerScoreRef.current = event.message.player1Score;
-                        setOpponentScore(event.message.player2Score);
-                        console.log("ante", playerLegs, event.message.player2Legs)
+                        // Check if either player's legs changed
+                        if (playerLegsRef.current !== event.message.player1Legs || 
+                            opponentLegsRef.current !== event.message.player2Legs) {
+                            legChanged = true;
+                            console.log("Leg score changed, resetting scores to initial value");
+                        }
+                        
+                        // Update legs
                         setPlayerLegs(event.message.player1Legs);
                         playerLegsRef.current = event.message.player1Legs;
                         setOpponentLegs(event.message.player2Legs);
                         opponentLegsRef.current = event.message.player2Legs;
                     } else {
-                        // I'm player2, so update player1's score and my score
-                        console.log(`Updating scores: my score=${event.message.player2Score}, opponent score=${event.message.player1Score} (I'm player2)`);
-                        setPlayerScore(event.message.player2Score);
-                        playerScoreRef.current = event.message.player2Score;
-                        setOpponentScore(event.message.player1Score);
-
+                        // Check if either player's legs changed
+                        if (playerLegsRef.current !== event.message.player2Legs || 
+                            opponentLegsRef.current !== event.message.player1Legs) {
+                            legChanged = true;
+                            console.log("Leg score changed, resetting scores to initial value");
+                        }
+                        
                         // Update legs
                         setPlayerLegs(event.message.player2Legs);
-                        console.log("ante 2", event.message)
                         playerLegsRef.current = event.message.player2Legs;
                         setOpponentLegs(event.message.player1Legs);
                         opponentLegsRef.current = event.message.player1Legs;
                     }
-
-                    // if (event.messages.currentPlayer === 'player1') {
-                    //     console.log("ante jel krepan tu")
-                    //     if (opponentLegs !== event.message.player2Legs) {
-                    //         // setOpponentLegs(old => old + 1)
-                    //         // setPlayerScore(INITIAL_SCORE)
-                    //         // setOpponentScore(INITIAL_SCORE)
-                    //         console.log("ante win")
-                    //     }
-                    // } else {
-                    //     if (opponentLegs !== event.message.player1Legs) {
-                    //         // setOpponentLegs(old => old + 1)
-                    //         // setPlayerScore(INITIAL_SCORE)
-                    //         // setOpponentScore(INITIAL_SCORE)
-                    //         console.log("ante win")
-                    //     }
-                    // }
+                    
+                    // If leg changed, reset scores to initial
+                    if (legChanged) {
+                        setPlayerScore(INITIAL_SCORE);
+                        playerScoreRef.current = INITIAL_SCORE;
+                        setOpponentScore(INITIAL_SCORE);
+                    } else {
+                        // Only update scores if leg hasn't changed
+                        // Update scores based on game role
+                        if (currentRole === 'player1') {
+                            // I'm player1, so update player2's score and my score
+                            console.log(`Updating scores: my score=${event.message.player1Score}, opponent score=${event.message.player2Score} (I'm player1)`);
+                            setPlayerScore(event.message.player1Score);
+                            playerScoreRef.current = event.message.player1Score;
+                            setOpponentScore(event.message.player2Score);
+                        } else {
+                            // I'm player2, so update player1's score and my score
+                            console.log(`Updating scores: my score=${event.message.player2Score}, opponent score=${event.message.player1Score} (I'm player2)`);
+                            setPlayerScore(event.message.player2Score);
+                            playerScoreRef.current = event.message.player2Score;
+                            setOpponentScore(event.message.player1Score);
+                        }
+                    }
 
                     // Update active player
                     const newActivePlayer = event.message.currentPlayer;
