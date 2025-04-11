@@ -58,6 +58,8 @@ function Game({playerName}: GameProps) {
     const gameRoleRef = useRef(gameRole);
     const activePlayerRef = useRef(activePlayer);
     const gameChannelRef = useRef(gameChannel);
+    const playerLegsRef = useRef(playerLegs);
+    const opponentLegsRef = useRef(opponentLegs);
 
     // Keep refs in sync with state
     useEffect(() => {
@@ -65,7 +67,9 @@ function Game({playerName}: GameProps) {
         gameRoleRef.current = gameRole;
         activePlayerRef.current = activePlayer;
         gameChannelRef.current = gameChannel;
-    }, [playerScore, gameRole, activePlayer, gameChannel]);
+        playerLegsRef.current = playerLegs;
+        opponentLegsRef.current = opponentLegs;
+    }, [playerScore, gameRole, activePlayer, gameChannel, playerLegs, opponentLegs]);
 
     // Handle mode selection
     const handleModeSelect = (mode: ScoreMode) => {
@@ -254,18 +258,49 @@ function Game({playerName}: GameProps) {
                     const currentRole = gameRoleRef.current;
                     console.log(`Game state update from opponent. I am ${currentRole}. Message:`, event.message);
 
-                    // Update opponent scores based on game role
+                    // Update scores and legs based on game role
                     if (currentRole === 'player1') {
-                        // I'm player1, so update player2's score
-                        console.log(`Updating opponent score to ${event.message.player2Score} (I'm player1)`);
+                        // I'm player1, so update player2's score and my score
+                        console.log(`Updating scores: my score=${event.message.player1Score}, opponent score=${event.message.player2Score} (I'm player1)`);
+                        setPlayerScore(event.message.player1Score);
+                        playerScoreRef.current = event.message.player1Score;
                         setOpponentScore(event.message.player2Score);
+                        console.log("ante", playerLegs, event.message.player2Legs)
+                        setPlayerLegs(event.message.player1Legs);
+                        playerLegsRef.current = event.message.player1Legs;
                         setOpponentLegs(event.message.player2Legs);
+                        opponentLegsRef.current = event.message.player2Legs;
                     } else {
-                        // I'm player2, so update player1's score
-                        console.log(`Updating opponent score to ${event.message.player1Score} (I'm player2)`);
+                        // I'm player2, so update player1's score and my score
+                        console.log(`Updating scores: my score=${event.message.player2Score}, opponent score=${event.message.player1Score} (I'm player2)`);
+                        setPlayerScore(event.message.player2Score);
+                        playerScoreRef.current = event.message.player2Score;
                         setOpponentScore(event.message.player1Score);
+
+                        // Update legs
+                        setPlayerLegs(event.message.player2Legs);
+                        console.log("ante 2", event.message)
+                        playerLegsRef.current = event.message.player2Legs;
                         setOpponentLegs(event.message.player1Legs);
+                        opponentLegsRef.current = event.message.player1Legs;
                     }
+
+                    // if (event.messages.currentPlayer === 'player1') {
+                    //     console.log("ante jel krepan tu")
+                    //     if (opponentLegs !== event.message.player2Legs) {
+                    //         // setOpponentLegs(old => old + 1)
+                    //         // setPlayerScore(INITIAL_SCORE)
+                    //         // setOpponentScore(INITIAL_SCORE)
+                    //         console.log("ante win")
+                    //     }
+                    // } else {
+                    //     if (opponentLegs !== event.message.player1Legs) {
+                    //         // setOpponentLegs(old => old + 1)
+                    //         // setPlayerScore(INITIAL_SCORE)
+                    //         // setOpponentScore(INITIAL_SCORE)
+                    //         console.log("ante win")
+                    //     }
+                    // }
 
                     // Update active player
                     const newActivePlayer = event.message.currentPlayer;
@@ -376,6 +411,8 @@ function Game({playerName}: GameProps) {
         const currentRole = gameRoleRef.current;
         const currentActivePlayer = activePlayerRef.current;
         const currentPlayerScore = playerScoreRef.current;
+        const currentPlayerLegs = playerLegsRef.current;
+        const currentOpponentLegs = opponentLegsRef.current;
 
         if (!currentGameChannel) {
             console.error("Cannot send game state: no game channel");
@@ -386,6 +423,8 @@ function Game({playerName}: GameProps) {
             // Get current states for logging
             const p1Score = currentRole === 'player1' ? currentPlayerScore : opponentScore;
             const p2Score = currentRole === 'player2' ? currentPlayerScore : opponentScore;
+            const p1Legs = currentRole === 'player1' ? currentPlayerLegs : currentOpponentLegs;
+            const p2Legs = currentRole === 'player2' ? currentPlayerLegs : currentOpponentLegs;
 
             // Create message
             const gameStateMessage: GameStateMessage = {
@@ -393,13 +432,13 @@ function Game({playerName}: GameProps) {
                 playerId: playerName,
                 player1Score: currentRole === 'player1' ? currentPlayerScore : opponentScore,
                 player2Score: currentRole === 'player2' ? currentPlayerScore : opponentScore,
-                player1Legs: currentRole === 'player1' ? playerLegs : opponentLegs,
-                player2Legs: currentRole === 'player2' ? playerLegs : opponentLegs,
+                player1Legs: currentRole === 'player1' ? currentPlayerLegs : currentOpponentLegs,
+                player2Legs: currentRole === 'player2' ? currentPlayerLegs : currentOpponentLegs,
                 currentPlayer: currentActivePlayer,
                 timestamp: Date.now()
             };
 
-            console.log(`Sending game state: I am ${currentRole}, scores: P1=${p1Score}, P2=${p2Score}, activePlayer=${currentActivePlayer}`);
+            console.log(`Sending game state: I am ${currentRole}, scores: P1=${p1Score}/${p1Legs}, P2=${p2Score}/${p2Legs}, activePlayer=${currentActivePlayer}`);
 
             pubnub.publish({
                 channel: currentGameChannel,
@@ -480,6 +519,8 @@ function Game({playerName}: GameProps) {
                 // Win
                 console.log("Win!");
                 setPlayerLegs(prev => prev + 1);
+                setPlayerScore(INITIAL_SCORE)
+                setOpponentScore(INITIAL_SCORE)
                 resetScores();
 
                 // Send updated game state to opponent
